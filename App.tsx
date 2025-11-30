@@ -24,10 +24,10 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [eraserCount, setEraserCount] = useState(0);
   const eraserCountRef = useRef(0);
-  
+
   // Skin State
   const [selectedSkin, setSelectedSkin] = useState<PlaneSkin>(PlaneSkin.DEFAULT);
-  
+
   // Music & Audio State
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.5);
@@ -54,6 +54,7 @@ export default function App() {
   const [showSDKDebug, setShowSDKDebug] = useState(false);
 
   const [gameResetKey, setGameResetKey] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   // Shop & Upgrade State
   const [playerProgress, setPlayerProgress] = useState<PlayerProgress>({
@@ -274,6 +275,7 @@ export default function App() {
   setScoreSubmitted(false);
   setIsNewRecord(false);
   setCoinsEarnedThisGame(0);
+  setCountdown(null);
 
   // NEW: Reset main gameplay counters
   setScore(0);
@@ -285,11 +287,29 @@ export default function App() {
   setGameResetKey(prev => prev + 1);
 };
   const startGame = () => {
-    // Ensure Audio Context is resumed on user gesture
-    getMusicManager().play();
-    gameplayStart();
-    setGameState(GameState.PLAYING);
+    // Start countdown
+    setCountdown(3);
   };
+
+  // Handle countdown
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) {
+      if (countdown === 0) {
+        // Countdown finished, start the game
+        getMusicManager().play();
+        gameplayStart();
+        setGameState(GameState.PLAYING);
+        setCountdown(null);
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const handlePurchaseUpgrade = (upgradeId: UpgradeType) => {
     const upgrade = UPGRADES[upgradeId];
@@ -339,7 +359,7 @@ export default function App() {
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#fdfbf7] font-hand text-gray-800 select-none touch-none">
-      
+
       {/* Custom Animations Style Block */}
       <style>{`
         @keyframes stamp {
@@ -446,6 +466,7 @@ export default function App() {
         inventory={playerProgress.inventory}
         onUseConsumable={handleUseConsumable}
         gamesPlayed={playerProgress.gamesPlayed}
+        countdown={countdown}
       />
 
       {/* HUD - Score (Styled like a sticker) */}
@@ -789,6 +810,23 @@ export default function App() {
                 Try Again
               </button>
             </div>
+        </div>
+      )}
+
+      {/* Countdown Overlay */}
+      {countdown !== null && countdown > 0 && (
+        <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none bg-black/20 backdrop-blur-sm">
+          <div
+            className="text-8xl sm:text-9xl md:text-[12rem] font-bold text-gray-800 font-hand"
+            style={{
+              transform: `scale(${1.2 + (3 - countdown) * 0.3})`,
+              opacity: countdown === 3 ? 1 : countdown === 2 ? 0.9 : 0.7,
+              transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              textShadow: '4px 4px 8px rgba(0,0,0,0.3)'
+            }}
+          >
+            {countdown}
+          </div>
         </div>
       )}
 

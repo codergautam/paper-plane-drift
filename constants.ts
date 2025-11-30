@@ -13,8 +13,8 @@ export const MAX_SPEED = 9;
 export const SPEED_INCREMENT = 0.001;
 
 // Dimensions relative to a base scale (assuming ~1080p height logic, scaled down)
-export const PLAYER_WIDTH = 40;
-export const PLAYER_HEIGHT = 20;
+export const PLAYER_WIDTH = 80;
+export const PLAYER_HEIGHT = 40;
 
 export const PENCIL_WIDTH = 15;
 export const PENCIL_HEIGHT = 120;

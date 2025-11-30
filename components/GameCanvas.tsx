@@ -25,6 +25,7 @@ interface GameCanvasProps {
   inventory: PlayerInventory; // Player's consumable inventory
   onUseConsumable: (consumableId: ConsumableType) => void; // Callback to decrement inventory
   gamesPlayed: number; // Number of games played (for unlocking power-ups)
+  countdown: number | null; // Countdown before game starts
 }
 
 interface BgDoodle {
@@ -66,7 +67,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   upgrades,
   inventory,
   onUseConsumable,
-  gamesPlayed
+  gamesPlayed,
+  countdown
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
@@ -95,7 +97,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   // Power-up State
   const shieldActiveRef = useRef<boolean>(false); // Shield from one hit
   const boostActiveRef = useRef<number>(0); // Remaining frames for boost effect
-  
+
   // Texture Refs
   const paperPatternRef = useRef<CanvasPattern | null>(null);
   const comicPatternRef = useRef<CanvasPattern | null>(null);
@@ -110,7 +112,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         x, y,
         vx: (Math.random() - 0.5) * 10 * speedScale,
         vy: (Math.random() - 0.5) * 10 * speedScale,
-        width: Math.random() * 3 + 2, 
+        width: Math.random() * 3 + 2,
         height: Math.random() * 3 + 2,
         life: 1.0,
         color
@@ -166,7 +168,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           hasTrail: true
         });
      }
-     
+
      // Add distinct pencil tip debris (dark/lead)
      for (let i = 0; i < 6; i++) {
         particlesRef.current.push({
@@ -176,7 +178,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           width: 3,
           height: 3,
           life: 0.9,
-          color: C.COLOR_PENCIL_TIP, 
+          color: C.COLOR_PENCIL_TIP,
           hasTrail: false
         });
      }
@@ -234,7 +236,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const spawnDoodle = (canvasWidth: number, canvasHeight: number, xOverride?: number) => {
     const typeRoll = Math.random();
     let type: BgDoodle['type'] = 'math';
-    
+
     // Expanded variety including Smudges
     if (typeRoll > 0.90) type = 'smudge';
     else if (typeRoll > 0.80) type = 'cloud';
@@ -247,7 +249,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // Depth determines speed, size, and opacity
     // 0.1 = Far away (slow, small, faint)
     // 0.5 = Closer (faster, larger, darker)
-    const depth = Math.random() * 0.4 + 0.1; 
+    const depth = Math.random() * 0.4 + 0.1;
     const startY = Math.random() * canvasHeight;
 
     bgDoodlesRef.current.push({
@@ -294,7 +296,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const spawnObstacle = (canvasWidth: number, canvasHeight: number) => {
     const typeRoll = Math.random();
     let type = ObstacleType.PENCIL;
-    
+
     // Weighted probabilities
     // Pencil Rain Chance handled separately within PENCIL block
     // Tornado: Rare (5%)
@@ -316,7 +318,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           y: -C.PENCIL_HEIGHT - (Math.random() * 100), // Slightly staggered heights
           width: C.PENCIL_WIDTH,
           height: C.PENCIL_HEIGHT,
-          vx: -gameSpeedRef.current * 0.5, 
+          vx: -gameSpeedRef.current * 0.5,
           vy: Math.random() * 4 + 3, // Faster fall
           rotation: 0
         });
@@ -342,7 +344,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       // Standard Pencil
       obs = {
         type,
-        x: Math.random() * (canvasWidth - 100) + 100, 
+        x: Math.random() * (canvasWidth - 100) + 100,
         y: -C.PENCIL_HEIGHT,
         width: C.PENCIL_WIDTH,
         height: C.PENCIL_HEIGHT,
@@ -485,7 +487,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     frameCountRef.current++;
 
-    if (gameState === GameState.PLAYING) {
+    if (gameState === GameState.PLAYING && countdown === null) {
         // Update consumable timers
         if (magnetActiveRef.current > 0) {
           magnetActiveRef.current--;
@@ -510,39 +512,42 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           boostActiveRef.current--;
         }
 
-        distanceRef.current += gameSpeedRef.current / 100;
+        // Only update game mechanics when countdown is finished
+        if (countdown === null) {
+          distanceRef.current += gameSpeedRef.current / 100;
 
-        if (gameSpeedRef.current < C.MAX_SPEED && slowMotionActiveRef.current === 0) {
-          gameSpeedRef.current += C.SPEED_INCREMENT;
-        }
-
-        const currentSpawnRate = Math.max(20, C.SPAWN_RATE_INITIAL - Math.floor(scoreRef.current / 100));
-        if (frameCountRef.current % currentSpawnRate === 0) {
-          spawnObstacle(canvas.width, canvas.height);
-        }
-
-        // Spawn power-ups less frequently than obstacles (only after 10 games played)
-        if (gamesPlayed >= 10) {
-          const powerUpSpawnRate = Math.max(120, 200 - Math.floor(scoreRef.current / 150));
-          if (frameCountRef.current % powerUpSpawnRate === 0 && Math.random() > 0.5) {
-            spawnPowerUp(canvas.width, canvas.height);
+          if (gameSpeedRef.current < C.MAX_SPEED && slowMotionActiveRef.current === 0) {
+            gameSpeedRef.current += C.SPEED_INCREMENT;
           }
-        }
 
-        // --- Eraser Snow (Weather Effect) ---
-        // Spawn small white particles from the top/right
-        if (frameCountRef.current % 5 === 0) {
-           particlesRef.current.push({
-             x: canvas.width + Math.random() * 50,
-             y: Math.random() * canvas.height * 0.5, // Mostly top half
-             vx: -gameSpeedRef.current * 0.8 - Math.random(),
-             vy: Math.random() * 2 + 0.5, // Fall slowly
-             width: 4,
-             height: 4,
-             life: 2.0, // Last a while
-             color: '#ffffff',
-             hasTrail: false
-           });
+          const currentSpawnRate = Math.max(20, C.SPAWN_RATE_INITIAL - Math.floor(scoreRef.current / 100));
+          if (frameCountRef.current % currentSpawnRate === 0) {
+            spawnObstacle(canvas.width, canvas.height);
+          }
+
+          // Spawn power-ups less frequently than obstacles (only after 10 games played)
+          if (gamesPlayed >= 10) {
+            const powerUpSpawnRate = Math.max(120, 200 - Math.floor(scoreRef.current / 150));
+            if (frameCountRef.current % powerUpSpawnRate === 0 && Math.random() > 0.5) {
+              spawnPowerUp(canvas.width, canvas.height);
+            }
+          }
+
+          // --- Eraser Snow (Weather Effect) ---
+          // Spawn small white particles from the top/right
+          if (frameCountRef.current % 5 === 0) {
+             particlesRef.current.push({
+               x: canvas.width + Math.random() * 50,
+               y: Math.random() * canvas.height * 0.5, // Mostly top half
+               vx: -gameSpeedRef.current * 0.8 - Math.random(),
+               vy: Math.random() * 2 + 0.5, // Fall slowly
+               width: 4,
+               height: 4,
+               life: 2.0, // Last a while
+               color: '#ffffff',
+               hasTrail: false
+             });
+          }
         }
     } else if (gameState === GameState.START) {
         gameSpeedRef.current = 3;
@@ -556,7 +561,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // --- Physics ---
     const p = playerRef.current;
 
-    if (gameState === GameState.PLAYING) {
+    if (gameState === GameState.PLAYING && countdown === null) {
         // Apply Stability upgrade (reduces gravity)
         const stabilityMultiplier = getUpgradeEffect(UPGRADES[UpgradeType.STABILITY], upgrades.stability);
         let gravity = C.GRAVITY * stabilityMultiplier;
@@ -580,7 +585,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           const tapeGravityReduction = 0.5 + (windResistance * 0.4); // 0.5 base, up to 0.9 at max upgrade
           gravity *= tapeGravityReduction;
           drag = 0.92;
-          
+
           if (frameCountRef.current % 4 === 0) {
             particlesRef.current.push({
               x: p.x,
@@ -603,7 +608,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           currentThrustRef.current -= currentThrustRef.current * C.THRUST_DECAY;
           if (currentThrustRef.current < 0.01) currentThrustRef.current = 0;
           if (p.vy < 0) {
-              drag *= 0.95; 
+              drag *= 0.95;
           }
         }
 
@@ -624,10 +629,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           p.y = 0;
           p.vy = 0;
         }
-    } else if (gameState === GameState.START) {
+    } else if (gameState === GameState.START || (gameState === GameState.PLAYING && countdown !== null)) {
+        // Hover animation during START or countdown
         const hoverY = canvas.height / 2;
         p.y = hoverY + Math.sin(frameCountRef.current * 0.05) * 25;
-        p.vy = Math.cos(frameCountRef.current * 0.05) * 1.5; 
+        p.vy = Math.cos(frameCountRef.current * 0.05) * 1.5;
         p.x = 50;
     }
 
@@ -679,7 +685,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Magnet Effect: Pull erasers toward player
-      if (gameState === GameState.PLAYING && magnetActiveRef.current > 0 && obs.type === ObstacleType.ERASER) {
+      if (gameState === GameState.PLAYING && countdown === null && magnetActiveRef.current > 0 && obs.type === ObstacleType.ERASER) {
         const dx = p.x - obs.x;
         const dy = p.y - obs.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -707,7 +713,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      if (gameState === GameState.PLAYING && checkCollision(p, obs)) {
+      if (gameState === GameState.PLAYING && countdown === null && checkCollision(p, obs)) {
         if (obs.type === ObstacleType.ERASER) {
           eraserCountRef.current += 1;
           setEraserCount(eraserCountRef.current);
@@ -761,7 +767,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Magnet Effect: Pull power-ups toward player
-      if (gameState === GameState.PLAYING && magnetActiveRef.current > 0) {
+      if (gameState === GameState.PLAYING && countdown === null && magnetActiveRef.current > 0) {
         const dx = p.x - powerUp.x;
         const dy = p.y - powerUp.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -774,7 +780,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Collision detection for power-up collection
-      if (gameState === GameState.PLAYING && checkCollision(p, powerUp)) {
+      if (gameState === GameState.PLAYING && countdown === null && checkCollision(p, powerUp)) {
         // Apply power-up effect
         switch (powerUp.type) {
           case PowerUpType.SHIELD_TAPE:
@@ -820,7 +826,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       pt.y += pt.vy;
       pt.vx *= 0.94;
       pt.vy *= 0.94;
-      
+
       // Snow drifts differently
       if (pt.color === '#ffffff') {
          pt.vx = -gameSpeedRef.current * 0.6; // Constant wind
@@ -830,7 +836,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
          pt.vy += 0.15; // Gravity pull on debris
          pt.life -= 0.02;
       }
-      
+
       // Golden Sparkles Logic
       if (skin === PlaneSkin.GOLD && Math.random() > 0.95 && gameState === GameState.PLAYING) {
          // Ambient sparkles for gold skin handled in render, but debris logic here
@@ -838,7 +844,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     });
     particlesRef.current = particlesRef.current.filter(pt => pt.life > 0);
 
-    if (gameState === GameState.PLAYING && frameCountRef.current % 10 === 0) {
+    if (gameState === GameState.PLAYING && countdown === null && frameCountRef.current % 10 === 0) {
       scoreRef.current += 1;
       setScore(scoreRef.current);
     }
@@ -979,7 +985,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.scale(bg.scale, bg.scale);
       ctx.rotate(bg.rotation);
       ctx.globalAlpha = bg.opacity;
-      
+
       if (bg.type === 'smudge') {
         // Blurry smudge
         const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
@@ -993,7 +999,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.filter = 'none'; // Reset filter
       } else {
         // Standard doodles
-        ctx.fillStyle = '#9ca3af'; 
+        ctx.fillStyle = '#9ca3af';
         ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
@@ -1041,7 +1047,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           ctx.stroke();
         } else if (bg.type === 'face') {
           ctx.beginPath();
-          ctx.arc(0, 0, 12, 0, Math.PI * 2); 
+          ctx.arc(0, 0, 12, 0, Math.PI * 2);
           ctx.stroke();
           ctx.fillStyle = '#9ca3af';
           ctx.beginPath();
@@ -1102,14 +1108,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.quadraticCurveTo(-hw - 1, 0, -hw, -hh);
         ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.06)';
-        ctx.fillRect(-hw * 0.35, -hh, hw * 0.7, hh + paintEnd); 
+        ctx.fillRect(-hw * 0.35, -hh, hw * 0.7, hh + paintEnd);
         ctx.beginPath();
-        ctx.fillStyle = '#fde68a'; 
+        ctx.fillStyle = '#fde68a';
         ctx.moveTo(-hw, paintEnd);
         ctx.lineTo(-hw * 0.3, paintEnd - 2);
         ctx.lineTo(hw * 0.3, paintEnd + 3);
         ctx.lineTo(hw, paintEnd);
-        ctx.lineTo(0, hh + 8); 
+        ctx.lineTo(0, hh + 8);
         ctx.closePath();
         ctx.fill();
         ctx.beginPath();
@@ -1125,10 +1131,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.fillRect(-obs.width/2 + 5, -obs.height/2 + 5, obs.width-10, 5);
       } else if (obs.type === ObstacleType.ERASER) {
-        ctx.transform(1, -0.2, 0, 1, 0, 0); 
+        ctx.transform(1, -0.2, 0, 1, 0, 0);
         ctx.fillStyle = C.COLOR_ERASER_PINK;
         ctx.fillRect(-obs.width/2, -obs.height/2, obs.width, obs.height);
-        ctx.fillStyle = '#60a5fa'; 
+        ctx.fillStyle = '#60a5fa';
         ctx.fillRect(-obs.width/2 + obs.width*0.6, -obs.height/2, obs.width*0.4, obs.height);
       }
 
@@ -1229,10 +1235,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // --- Particles ---
     particlesRef.current.forEach(pt => {
       ctx.save();
-      
+
       if (pt.hasTrail) {
          const speed = Math.sqrt(pt.vx*pt.vx + pt.vy*pt.vy);
-         const trailLength = Math.min(speed * 3, 30); 
+         const trailLength = Math.min(speed * 3, 30);
          ctx.beginPath();
          ctx.moveTo(pt.x, pt.y);
          const nx = pt.vx / (speed || 1);
@@ -1241,14 +1247,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
          ctx.strokeStyle = pt.color;
          ctx.lineWidth = Math.max(1, pt.width / 2);
          ctx.lineCap = 'round';
-         ctx.globalAlpha = pt.life * 0.6; 
+         ctx.globalAlpha = pt.life * 0.6;
          ctx.stroke();
       }
 
       ctx.globalAlpha = pt.life;
       ctx.fillStyle = pt.color;
       ctx.translate(pt.x, pt.y);
-      ctx.rotate(pt.life * 5); 
+      ctx.rotate(pt.life * 5);
       // Eraser Snow (simple squares) or standard particles
       ctx.fillRect(-pt.width/2, -pt.height/2, pt.width, pt.height);
       ctx.restore();
@@ -1268,7 +1274,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#60a5fa';
         ctx.beginPath();
-        const shieldRadius = 35 + Math.sin(frameCountRef.current * 0.1) * 3;
+        const shieldRadius = 70 + Math.sin(frameCountRef.current * 0.1) * 6;
         ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
@@ -1290,8 +1296,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
         ctx.restore();
       }
-      
-      const tiltSensitivity = 0.12; 
+
+      const tiltSensitivity = 0.12;
       let rot = p.vy * tiltSensitivity;
 
       if (Math.abs(p.vy) < 2.5) {
@@ -1302,8 +1308,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(0, bob);
       }
 
-      const minRot = -0.85; 
-      const maxRot = 1.2; 
+      const minRot = -0.85;
+      const maxRot = 1.2;
       rot = Math.max(minRot, Math.min(maxRot, rot));
 
       ctx.rotate(rot);
@@ -1313,9 +1319,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       const thrust = currentThrustRef.current;
 
       // --- Skin Specific Colors & Styles ---
-      let strokeColor = isSticky ? '#b45309' : '#374151'; 
-      let farWingColor = isSticky ? '#fef3c7' : '#f3f4f6'; 
-      let nearWingColor = isSticky ? '#fffbeb' : '#ffffff'; 
+      let strokeColor = isSticky ? '#b45309' : '#374151';
+      let farWingColor = isSticky ? '#fef3c7' : '#f3f4f6';
+      let nearWingColor = isSticky ? '#fffbeb' : '#ffffff';
 
       if (skin === PlaneSkin.NEWSPAPER) {
         farWingColor = '#e5e7eb';
@@ -1339,10 +1345,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       const flutterBase = Math.sin(frameCountRef.current * 0.8);
       const flutterJitter = Math.cos(frameCountRef.current * 2.2) * 0.4;
       const flutter = (flutterBase + flutterJitter) * (speed * 0.3);
-      
+
       const w = p.width;
       const h = p.height;
-      
+
       // Shadow
       ctx.shadowColor = "rgba(0,0,0,0.1)";
       ctx.shadowBlur = 6;
@@ -1363,7 +1369,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         const tailX = -w/2 - 5;
         const tailY = -h/2 - 5;
         const bodyY = h/2;
-        
+
         ctx.beginPath();
         ctx.fillStyle = farWingColor;
         // Far Wing
@@ -1404,7 +1410,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // -- FAR WING --
         ctx.beginPath();
-        
+
         // Custom Fills per skin
         if (skin === PlaneSkin.FOIL) {
            const grad = ctx.createLinearGradient(tailX, 0, noseX, 0);
@@ -1423,16 +1429,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
            ctx.fillStyle = farWingColor;
         }
 
-        ctx.moveTo(noseX, 0); 
+        ctx.moveTo(noseX, 0);
         ctx.quadraticCurveTo(0, -h * 0.4, tailX - 5, farWingTipY);
-        ctx.lineTo(tailX * 0.4, 0); 
+        ctx.lineTo(tailX * 0.4, 0);
         ctx.closePath();
         ctx.fill();
 
         // Overlays
         if (skin === PlaneSkin.NEWSPAPER && paperPatternRef.current) {
           ctx.fillStyle = paperPatternRef.current;
-          ctx.globalAlpha = 0.4; 
+          ctx.globalAlpha = 0.4;
           ctx.fill();
           ctx.globalAlpha = 1.0;
         }
@@ -1444,9 +1450,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
 
         ctx.stroke();
-        
+
         // Reset Shadow for near parts so they don't shadow far parts weirdly
-        ctx.shadowBlur = 0; 
+        ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
         ctx.shadowOffsetX = 0;
 
@@ -1455,7 +1461,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         if (skin === PlaneSkin.FOIL) {
            const grad = ctx.createLinearGradient(tailX, 0, noseX, 0);
            grad.addColorStop(0, '#cbd5e1');
-           grad.addColorStop(0.5, '#ffffff'); 
+           grad.addColorStop(0.5, '#ffffff');
            grad.addColorStop(1, '#94a3b8');
            ctx.fillStyle = grad;
         } else if (skin === PlaneSkin.GOLD) {
@@ -1468,20 +1474,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
            ctx.fillStyle = nearWingColor;
         }
 
-        ctx.moveTo(noseX, 0); 
-        ctx.lineTo(tailX, nearWingTipY); 
-        ctx.lineTo(tailX + 5, h * 0.6); 
-        ctx.lineTo(noseX, 0); 
+        ctx.moveTo(noseX, 0);
+        ctx.lineTo(tailX, nearWingTipY);
+        ctx.lineTo(tailX + 5, h * 0.6);
+        ctx.lineTo(noseX, 0);
         ctx.closePath();
         ctx.fill();
 
         // Overlays
         if (skin === PlaneSkin.NEWSPAPER && paperPatternRef.current) {
           ctx.fillStyle = paperPatternRef.current;
-          ctx.globalAlpha = 0.4; 
+          ctx.globalAlpha = 0.4;
           ctx.fill();
           ctx.globalAlpha = 1.0;
-          
+
           // Draw "Text" lines
           ctx.strokeStyle = '#9ca3af';
           ctx.lineWidth = 1;
@@ -1508,7 +1514,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.beginPath();
         ctx.moveTo(noseX, 0);
         ctx.lineTo(tailX + 2, 0);
-        ctx.strokeStyle = isSticky ? '#d97706' : (skin === PlaneSkin.GOLD ? '#b45309' : '#9ca3af'); 
+        ctx.strokeStyle = isSticky ? '#d97706' : (skin === PlaneSkin.GOLD ? '#b45309' : '#9ca3af');
         if (skin === PlaneSkin.COMIC) ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -1516,7 +1522,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         // Speed Lines (Visual Effect)
         if (speed > 5 && gameState === GameState.PLAYING) {
             ctx.beginPath();
-            ctx.strokeStyle = skin === PlaneSkin.GOLD ? 'rgba(234, 179, 8, 0.5)' : 'rgba(148, 163, 184, 0.5)'; 
+            ctx.strokeStyle = skin === PlaneSkin.GOLD ? 'rgba(234, 179, 8, 0.5)' : 'rgba(148, 163, 184, 0.5)';
             ctx.lineWidth = 1.5;
             const lineLen = speed * 5;
             ctx.moveTo(tailX - 5, farWingTipY);
@@ -1531,8 +1537,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         // Thrust Effect
         if (thrust > 0.05) {
             ctx.save();
-            const lineCount = Math.floor(thrust * 4) + 2; 
-            ctx.strokeStyle = isSticky ? 'rgba(217, 119, 6, 0.5)' : 'rgba(156, 163, 175, 0.6)'; 
+            const lineCount = Math.floor(thrust * 4) + 2;
+            ctx.strokeStyle = isSticky ? 'rgba(217, 119, 6, 0.5)' : 'rgba(156, 163, 175, 0.6)';
             if (skin === PlaneSkin.COMIC) ctx.strokeStyle = '#000000';
             if (skin === PlaneSkin.GOLD) ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)';
 
@@ -1540,13 +1546,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.lineCap = 'round';
             for(let i=0; i<lineCount; i++) {
                ctx.beginPath();
-               const yBase = (Math.random() - 0.5) * 8; 
+               const yBase = (Math.random() - 0.5) * 8;
                const len = 10 + thrust * 25 + Math.random() * 15;
                ctx.moveTo(tailX, yBase);
                ctx.quadraticCurveTo(
-                   tailX - len * 0.5, 
-                   yBase + (Math.random() - 0.5) * 10, 
-                   tailX - len, 
+                   tailX - len * 0.5,
+                   yBase + (Math.random() - 0.5) * 10,
+                   tailX - len,
                    yBase + (Math.random() - 0.5) * 20
                );
                ctx.stroke();
@@ -1613,19 +1619,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         const cY = 25;
         ctx.save();
         ctx.font = '16px "Patrick Hand", cursive';
-        ctx.fillStyle = '#6b7280'; 
+        ctx.fillStyle = '#6b7280';
         ctx.textAlign = 'right';
         ctx.fillText("Velocity:", cX - barW/2 - 10, cY + 5);
-        ctx.strokeStyle = '#9ca3af'; 
+        ctx.strokeStyle = '#9ca3af';
         ctx.lineWidth = 1;
         ctx.strokeRect(cX - barW/2, cY - barH/2, barW, barH);
-        ctx.fillStyle = '#93c5fd'; 
-        if (progress > 0.5) ctx.fillStyle = '#fcd34d'; 
-        if (progress > 0.8) ctx.fillStyle = '#fca5a5'; 
+        ctx.fillStyle = '#93c5fd';
+        if (progress > 0.5) ctx.fillStyle = '#fcd34d';
+        if (progress > 0.8) ctx.fillStyle = '#fca5a5';
         ctx.fillRect(cX - barW/2 + 1, cY - barH/2 + 1, (barW - 2) * progress, barH - 2);
         ctx.textAlign = 'left';
         ctx.font = 'bold 16px "Patrick Hand", cursive';
-        ctx.fillStyle = '#4b5563'; 
+        ctx.fillStyle = '#4b5563';
         ctx.fillText(`${multiplier}x`, cX + barW/2 + 10, cY + 5);
         ctx.restore();
     }
@@ -1706,13 +1712,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           resetGame();
           setGameState(GameState.PLAYING);
         }
-        if (gameState === GameState.PLAYING) {
+        if (gameState === GameState.PLAYING && countdown === null) {
             isUpPressedRef.current = true;
         }
       }
 
       // Consumable activation keys
-      if (gameState === GameState.PLAYING) {
+      if (gameState === GameState.PLAYING && countdown === null) {
         if (e.code === 'Digit1' || e.code === 'Numpad1') {
           useMagnet();
         } else if (e.code === 'Digit2' || e.code === 'Numpad2') {
@@ -1722,7 +1728,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
     };
-    
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         isUpPressedRef.current = false;
@@ -1735,7 +1741,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         resetGame();
         setGameState(GameState.PLAYING);
       }
-      if (gameState === GameState.PLAYING) {
+      if (gameState === GameState.PLAYING && countdown === null) {
           isUpPressedRef.current = true;
       }
     };
@@ -1760,7 +1766,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    
+
     const c = canvasRef.current;
     if (c) {
       c.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -1779,11 +1785,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         c.removeEventListener('mousedown', handleMouseDown);
       }
     };
-  }, [gameState, setGameState]);
+  }, [gameState, setGameState, countdown]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="block w-full h-full cursor-pointer touch-none"
     />
   );
